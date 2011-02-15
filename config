@@ -1,0 +1,22 @@
+# list files and dirs to encrypt
+# files are encrypted as file.gpg
+# dirs are encrypted as dir_enc/file.gpg
+
+# keys
+/etc/keys
+
+# openvpn
+/etc/openvpn/keys
+
+# ssh
+/etc/ssh/moduli
+/etc/ssh/ssh_host_dsa_key
+/etc/ssh/ssh_host_key
+/etc/ssh/ssh_host_rsa_key
+
+# user passwords
+/etc/shadow
+
+# root files
+/root/.ssh
+/root/.keys

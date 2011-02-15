@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# setup
+# gpg --homedir $home(below) --import /path/to/plaintext/publickey
+
+
+# lib dir
+lib_dir=/usr/local/lib/encrypt-system-files
+
+#config and gpg home (should not need to change)
+config=$lib_dir/config
+home=$lib_dir/home
+
+# Reciepient
+enc_for=SystemEncrypt
+
+# gpg executable
+gpg=gpg2
+
+error() {
+  echo $@
+  exit 1
+}
+RET=0
+
+# checks
+if ! [ -f "$config" ] ; then
+  error "Config not found at $config"
+
+elif ! [ -d "$home" ] ; then
+  error "Gpg home not found at $home"
+
+fi
+
+gpg_encrypt() {
+  orig="$1"
+  save="$2"
+  # if we already have a .gpg version, check if original file has changed
+  if [ -f "$save" ] ; then
+    MTIME_OLD=$(ls -lt --full-time "$orig" | awk '{print $6,$7,$8}')
+    MTIME_NEW=$(ls -lt --full-time "$save" | awk '{print $6,$7,$8}')
+    
+    if [ "$MTIME_OLD" == "$MTIME_NEW" ] ; then
+      # files are the same
+      return
+    fi
+  fi
+  
+  rm -f "$save"
+  $gpg -q --batch --armor --homedir $home -r $enc_for --trust-model always --output "$save" --encrypt "$orig"
+  if [ $? -ne 0 ] ; then
+    echo "Failed to encrypt $orig"
+    RET=1
+  fi
+  
+  # change perms based on original file's perms
+  # YES, I know it doesn't technically matter, but why take the chance?
+  chmod --reference="$orig" "$save"
+  chown --reference="$orig" "$save"
+  
+  # set times to be the same for future encrypts
+  MTIME_OLD=$(ls -lt --full-time "$orig" | awk '{print $6,$7,$8}')
+  touch --date="$MTIME_OLD" "$save"
+
+}
+
+# read config, and process each file/dir
+cat $config | while read LINE ; do
+  if [ -n "$(echo $LINE | grep ^#)" ] ; then
+    # comment
+    continue
+  
+  elif [ -z "$(echo $LINE | sed 's/ //g')" ] ; then
+    # blank or empty line
+    continue
+  
+  elif ! [ -e "$LINE" ] ; then
+    # file or dir does not exist
+    continue
+  
+  fi
+  
+  if [ -f "$LINE" ] ; then
+    gpg_encrypt "$LINE" "$LINE.gpg"
+    
+  elif [ -d "$LINE" ] ; then
+    SAVEDIR="${LINE}_enc"
+    mkdir -p "$SAVEDIR"
+    chmod --reference="$LINE" "$SAVEDIR"
+    chown --reference="$LINE" "$SAVEDIR"
+    find "$LINE" -maxdepth 1 -type f | while read FILE ; do
+      if [ -f "$FILE" ] ; then
+        FILENAME="$(basename $FILE)"
+	gpg_encrypt "$FILE" "$SAVEDIR/$FILENAME.gpg"
+      fi
+    done
+    # reset mod time
+    MTIME_OLD=$(ls -ltd --full-time "$LINE" | awk '{print $6,$7,$8}')
+    MTIME_NEW=$(ls -ltd --full-time "$SAVEDIR" | awk '{print $6,$7,$8}')
+    if [ "$MTIME_NEW" != "$MTIME_OLD" ] ; then
+      # just to make sure perms are still in sync
+      chmod --reference="$LINE" "$SAVEDIR"
+      chown --reference="$LINE" "$SAVEDIR"
+      # do the actual sync of time
+      touch --date="$MTIME_OLD" "$SAVEDIR"
+    fi
+  
+  fi
+
+done
+
+exit $RET

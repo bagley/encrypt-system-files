@@ -39,6 +39,12 @@ error() {
 }
 RET=0
 
+vecho() {
+  if [ $VERBOSE -ne 0 ] ; then
+    echo $1
+  fi
+}
+
 # checks
 if ! [ -f "$config" ] ; then
   error "Config not found at $config"
@@ -73,15 +79,20 @@ gpg_encrypt() {
     
     if [ "$MTIME_OLD" == "$MTIME_NEW" ] ; then
       # files are the same
+      vecho "...skipping already encrypted file $orig"
       return
     fi
   fi
   
   rm -f "$save"
   $gpg -q --batch --armor --homedir $home -r $enc_for --trust-model always --output "$save" --encrypt "$orig"
-  if [ $? -ne 0 ] ; then
-    echo "Failed to encrypt $orig"
-    RET=1
+  if [ $? -eq 0 ] ; then
+    vecho "__Encrypted__ $orig"
+  else
+    echo "ERROR: Failed to encrypt $orig"
+    rm -f "$save"
+    return 1
+  fi
   fi
   
   # change perms based on original file's perms
@@ -95,6 +106,15 @@ gpg_encrypt() {
 
 }
 
+### Main ###
+
+vecho "Using:"
+vecho "Recipient ... $enc_for"
+vecho "GPG exec  ... $gpg"
+vecho "GPG Home  ... $home"
+vecho "Config    ... $config"
+vecho
+
 # read config, and process each file/dir
 cat $config | while read LINE ; do
   if [ -n "$(echo $LINE | grep ^#)" ] ; then
@@ -107,14 +127,19 @@ cat $config | while read LINE ; do
   
   elif ! [ -e "$LINE" ] ; then
     # file or dir does not exist
+    vecho "Skipping non-existant file/dir $LINE"
     continue
   
   fi
   
   if [ -f "$LINE" ] ; then
     gpg_encrypt "$LINE" "$LINE.gpg"
+    [ $? -eq 0 ] || RET=1
     
   elif [ -d "$LINE" ] ; then
+    # we do empty dirs. Skipping them would tell users they are empty.
+    # this would be sensitive if the dirs were not world readable.
+    vecho "Checking dir for files: $LINE"
     SAVEDIR="${LINE}_enc"
     mkdir -p "$SAVEDIR"
     chmod --reference="$LINE" "$SAVEDIR"
@@ -123,6 +148,7 @@ cat $config | while read LINE ; do
       if [ -f "$FILE" ] ; then
         FILENAME="$(basename $FILE)"
 	gpg_encrypt "$FILE" "$SAVEDIR/$FILENAME.gpg"
+	[ $? -eq 0 ] || RET=1
       fi
     done
     # reset mod time
@@ -137,7 +163,18 @@ cat $config | while read LINE ; do
     fi
   
   fi
-
+  # hack to get while loop to give an correct RET value
+  # just run a non-existant command at the last line
+  # and if this is the last command in the loop,
+  # it will exit with value 127, so we can check for it
+  if [ $RET -ne 0 ] ; then
+    nocommandfound234123409123840 >/dev/null 2>&1
+  fi
 done
 
+if [ $? -ne 0 ] ; then
+  RET=1
+fi
+
+vecho "Exiting with value $RET"
 exit $RET

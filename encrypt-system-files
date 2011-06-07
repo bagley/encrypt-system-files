@@ -7,8 +7,11 @@
 # as well as encrypted files (gpg can currently error out
 # and nothing is done about it).
 
-# lib dir
-lib_dir=/usr/local/lib/encrypt-system-files
+# Reciepient
+enc_for=SystemEncrypt
+
+# settings dir
+lib_dir=/usr/local/share/encrypt-system-files
 
 #config and gpg home (should not need to change)
 config=$lib_dir/config

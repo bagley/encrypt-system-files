@@ -3,6 +3,9 @@
 # setup
 # gpg --homedir $home(below) --import /path/to/plaintext/publickey
 
+# TODO: check for zero length files, both for encrypting files
+# as well as encrypted files (gpg can currently error out
+# and nothing is done about it).
 
 # lib dir
 lib_dir=/usr/local/lib/encrypt-system-files
@@ -11,11 +14,24 @@ lib_dir=/usr/local/lib/encrypt-system-files
 config=$lib_dir/config
 home=$lib_dir/home
 
-# Reciepient
-enc_for=SystemEncrypt
+usage() {
+  echo "Usage: $0 [-v] [-t recipient] [-g /path/to/gpg] [-m /gpghome] [-c /config]"
+  exit 1
+}
 
-# gpg executable
-gpg=gpg2
+# get args
+VERBOSE=0
+while getopts "t:g:m:vh?" opt ; do
+    case $opt in
+      t) enc_for="$OPTARG" ;;
+      v) VERBOSE=1 ;;
+      g) gpg="$OPTARG" ;;
+      m) home="$OPTARG" ;;
+      c) config="$OPTARG" ;;
+      h|\?) usage ;;
+      *) echo "Unknown arg $opt" ; usage ;;
+    esac
+done
 
 error() {
   echo $@
@@ -30,6 +46,21 @@ if ! [ -f "$config" ] ; then
 elif ! [ -d "$home" ] ; then
   error "Gpg home not found at $home"
 
+fi
+
+# find gpg executable (only if user did not specify it - we check below)
+if [ -z "$gpg" ] ;then
+  for EACH in $(echo $PATH | sed 's/:/ /g') ; do
+    for GPGNAME in gpg2 gpg ; do
+      if [ -x "$EACH/$GPGNAME" ] ; then
+        gpg="$EACH/$GPGNAME"
+        break 2
+      fi
+    done
+  done
+fi
+if ! [ -x "$gpg" ] ; then
+  error "Failed to find gpg  $gpg"
 fi
 
 gpg_encrypt() {

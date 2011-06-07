@@ -3,9 +3,6 @@
 # setup
 # gpg --homedir $home(below) --import /path/to/plaintext/publickey
 
-# TODO: check for zero length files, both for encrypting files
-# as well as encrypted files (gpg can currently error out
-# and nothing is done about it).
 
 # Reciepient
 enc_for=SystemEncrypt
@@ -72,11 +69,30 @@ if ! [ -x "$gpg" ] ; then
   error "Failed to find gpg  $gpg"
 fi
 
+#############
 gpg_encrypt() {
   orig="$1"
   save="$2"
+  
+  # does file exist, is it a file, and is it non-empty
+  if ! [ -f "$orig" ] && ! [ -L "$orig" ] ; then
+    vecho "WARNING: Skipping non-existant or non-file/link $orig"
+    return # not 1 because this is not important
+    
+  elif ! [ -s "$orig" ] ; then
+    vecho "WARNING: Skipping empty file $orig"
+    return
+  fi
+  
+  if [ -f "$save" ] && ! [ -s "$save" ] ; then
+    echo "ERROR: GPG saved an empty file: $save"
+    echo "       Will try to reencrypt:   $orig"
+    rm -f "$save"
+  fi
+  
   # if we already have a .gpg version, check if original file has changed
-  if [ -f "$save" ] ; then
+  # and check that it is non-empty
+  if [ -f "$save" ] && [ -s "$save" ] ; then
     MTIME_OLD=$(ls -lt --full-time "$orig" | awk '{print $6,$7,$8}')
     MTIME_NEW=$(ls -lt --full-time "$save" | awk '{print $6,$7,$8}')
     
@@ -88,6 +104,9 @@ gpg_encrypt() {
   fi
   
   rm -f "$save"
+# gpg will not overwrite files
+#  touch "$save"
+#  chmod 600 "$save"
   $gpg -q --batch --armor --homedir $home -r $enc_for --trust-model always --output "$save" --encrypt "$orig"
   if [ $? -eq 0 ] ; then
     vecho "__Encrypted__ $orig"
@@ -96,6 +115,13 @@ gpg_encrypt() {
     rm -f "$save"
     return 1
   fi
+  
+  # double check for zero out files (these either failed encryption or keys were wrong)
+  if ! [ -s "$save" ] ; then
+    echo "ERROR: GPG outputed empty file: $save"
+    echo "       File will be removed. Are your keys okay?"
+    rm -f "$save"
+    return 1
   fi
   
   # change perms based on original file's perms
@@ -132,10 +158,12 @@ cat $config | while read LINE ; do
     # file or dir does not exist
     vecho "Skipping non-existant file/dir $LINE"
     continue
-  
+    
   fi
   
-  if [ -f "$LINE" ] ; then
+  if [ -f "$LINE" ] || [ -L "$LINE" ] ; then
+    # file or link
+    # links are fine, as chmod changes perms accordingly
     gpg_encrypt "$LINE" "$LINE.gpg"
     [ $? -eq 0 ] || RET=1
     
@@ -164,6 +192,9 @@ cat $config | while read LINE ; do
       # do the actual sync of time
       touch --date="$MTIME_OLD" "$SAVEDIR"
     fi
+    
+  else
+    vecho "ERROR: Skipping because was not a file/link/dir"
   
   fi
   # hack to get while loop to give an correct RET value

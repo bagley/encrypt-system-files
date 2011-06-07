@@ -1,0 +1,38 @@
+#!/bin/bash
+
+version=0.1
+
+tar="./encrypt-system-files-$version.tar.gz"
+
+folder="./encrypt-system-files-$version"
+
+# remove first, so on error we know something happened
+rm -f "$tar"
+
+cleanup() {
+  if [ -d "$folder" ] ; then
+    rm -f "$folder"/*  || exit 1
+    rmdir "$folder"    || exit 1
+  fi
+}
+
+if [ -z "$folder" ] ; then
+  echo "huh? variable \$folder is empty... exiting"
+  exit
+fi
+
+cleanup
+
+mkdir -m 700 "$folder"
+
+for EACH in install.sh config encrypt-system-files PublicKey_to_Encrypt ; do
+  cp ./$EACH "$folder/"
+done
+
+chmod 600 "$folder"/*
+chmod 700 "$folder/install.sh"
+
+tar --numeric-owner -czf "$tar" "$folder"
+chmod 600 "$tar"
+
+cleanup

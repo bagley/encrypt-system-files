@@ -1,0 +1,7 @@
+
+check for zero length files, both for encrypting files
+as well as encrypted files (gpg can currently error out
+and nothing is done about it).
+
+make a separate config file
+

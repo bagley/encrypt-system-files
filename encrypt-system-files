@@ -172,11 +172,9 @@ cat $config | while read LINE ; do
     # this would be sensitive if the dirs were not world readable.
     vecho "Checking dir for files: $LINE"
     SAVEDIR="${LINE}_enc"
-    if ! [ -d "$SAVEDIR" ] ; then
-      # we want times to never change,
-      # so only if non-existant
-      mkdir -p -m 700 "$SAVEDIR"
-    fi
+    mkdir -p "$SAVEDIR"
+    chmod --reference="$LINE" "$SAVEDIR"
+    chown --reference="$LINE" "$SAVEDIR"
     find "$LINE" -maxdepth 1 -type f | while read FILE ; do
       if [ -f "$FILE" ] ; then
         FILENAME="$(basename $FILE)"
@@ -184,28 +182,19 @@ cat $config | while read LINE ; do
 	[ $? -eq 0 ] || RET=1
       fi
     done
-    # are perms the same
-    # we dont want to always do it, so only on changes)
-    # drwxr-x---. 2 root root
-    PERMS_OLD=$(ls -ld "$LINE" | awk '{print $1,$2,$3,$4}')
-    PERMS_NEW=$(ls -ld "$SAVEDIR" | awk '{print $1,$2,$3,$4}')
-    if [ "$PERMS_OLD" != "$PERMS_NEW" ] ; then
-      vecho "...synced perms for $SAVEDIR"
-      chmod --reference="$LINE" "$SAVEDIR"
-      chown --reference="$LINE" "$SAVEDIR"
-      
-    fi
     # reset mod time
     MTIME_OLD=$(ls -ltd --full-time "$LINE" | awk '{print $6,$7,$8}')
     MTIME_NEW=$(ls -ltd --full-time "$SAVEDIR" | awk '{print $6,$7,$8}')
     if [ "$MTIME_NEW" != "$MTIME_OLD" ] ; then
-      # sync the times
-      vecho "...synced mod time for $SAVEDIR" 
+      # just to make sure perms are still in sync
+      chmod --reference="$LINE" "$SAVEDIR"
+      chown --reference="$LINE" "$SAVEDIR"
+      # do the actual sync of time
       touch --date="$MTIME_OLD" "$SAVEDIR"
     fi
     
   else
-    vecho "ERROR: Skipping because was not a file/link/dir"
+    vecho "ERROR: Skipping because was not a file/dir"
   
   fi
   # hack to get while loop to give an correct RET value

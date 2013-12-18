@@ -3,6 +3,8 @@
 # setup
 # gpg --homedir $home(below) --import /path/to/plaintext/publickey
 
+# Copyright Matt Bagley
+# under the GPL 3
 
 # Reciepient
 enc_for=SystemEncrypt
